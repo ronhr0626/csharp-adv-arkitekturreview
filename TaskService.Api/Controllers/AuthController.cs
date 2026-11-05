@@ -3,6 +3,7 @@ using TaskService.Api.Data;
 using TaskService.Api.DTO;
 using TaskService.Api.Models;
 using TaskService.Api.Services;
+using Microsoft.AspNetCore.Authorization;
 
 namespace TaskService.Api.Controllers;
 
@@ -66,7 +67,8 @@ public class AuthController : ControllerBase
         var token = _jwtService.CreateToken(user);
         return Ok(new { token });
     }
-
+    
+    [Authorize]
     [HttpGet("token")]
     public IActionResult ReadToken()
     {

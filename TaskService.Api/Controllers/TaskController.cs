@@ -1,64 +1,46 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using TaskService.Api.DTO;
-using TaskService.Api.Services;
 
 namespace TaskService.Api.Controllers;
 
 [ApiController]
 [Route("tasks")]
+[Authorize] // Only requests with a valid token get in. Everything else gets 401.
 public class TaskController : ControllerBase
 {
     private readonly Core.TaskService taskManager;
-    private readonly ITokenReader tokenReader;
 
-    public TaskController(Core.TaskService taskService, ITokenReader tokenReader)
+    public TaskController(Core.TaskService taskService)
     {
         taskManager = taskService;
-        this.tokenReader = tokenReader;
     }
 
-    private Guid? GetUserId()
+    // The token is already checked, so we can read the user id ("sub") directly
+    private Guid GetUserId()
     {
-        return tokenReader.GetUserId(Request.Headers.Authorization.ToString());
+        return Guid.Parse(User.FindFirst("sub")!.Value);
     }
 
     [HttpGet]
     public IActionResult GetTasks()
     {
-        var userId = GetUserId();
-        if (userId is null)
-        {
-            return Unauthorized();
-        }
-
-        return Ok(taskManager.GetTasks(userId.Value));
+        return Ok(taskManager.GetTasks(GetUserId()));
     }
 
     [HttpPost]
     public IActionResult AddTask([FromBody] CreateTaskRequest request)
     {
-        var userId = GetUserId();
-        if (userId is null)
-        {
-            return Unauthorized();
-        }
-
-        return Ok(taskManager.AddTask(request.Title, userId.Value));
+        return Ok(taskManager.AddTask(request.Title, GetUserId()));
     }
 
     [HttpPatch("{id}/complete")]
     public IActionResult CompleteTask(Guid id)
     {
-        var userId = GetUserId();
-        if (userId is null)
-        {
-            return Unauthorized();
-        }
-
         // The domain decides if the task exists for this user. The controller only maps it to HTTP.
         try
         {
-            taskManager.CompleteTask(id, userId.Value);
+            taskManager.CompleteTask(id, GetUserId());
             return NoContent();
         }
         catch (KeyNotFoundException ex)
@@ -70,15 +52,9 @@ public class TaskController : ControllerBase
     [HttpDelete("{id}")]
     public IActionResult DeleteTask(Guid id)
     {
-        var userId = GetUserId();
-        if (userId is null)
-        {
-            return Unauthorized();
-        }
-
         try
         {
-            taskManager.DeleteTask(id, userId.Value);
+            taskManager.DeleteTask(id, GetUserId());
             return NoContent();
         }
         catch (KeyNotFoundException ex)

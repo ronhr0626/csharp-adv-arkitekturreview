@@ -1,4 +1,7 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 using TaskService.Api.Data;
@@ -35,6 +38,30 @@ builder.Services.AddOpenApi(options =>
     });
 });
 builder.Services.AddControllers();
+
+// JWT check: the token must be signed with our secret and not be expired
+var jwtSecret = builder.Configuration["Jwt:Secret"]
+    ?? throw new InvalidOperationException("Jwt:Secret is missing in appsettings.json");
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        // Keep "sub" as "sub" (do not rename the claims)
+        options.MapInboundClaims = false;
+
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+            ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero,
+            ValidateIssuer = false,
+            ValidateAudience = false
+        };
+    });
+builder.Services.AddAuthorization();
 builder.Services.AddHealthChecks();
 
 builder.Services.AddDbContext<TaskDbContext>(options =>
@@ -42,7 +69,7 @@ builder.Services.AddDbContext<TaskDbContext>(options =>
 
 builder.Services.AddScoped<ITaskRepository, EfTaskRepository>();
 builder.Services.AddScoped<TaskServiceManager>();
-builder.Services.AddScoped<ITokenReader, TokenReader>();
+builder.Services.AddScoped<ITokenReader, TaskService.Api.Services.TokenReader>();
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 
@@ -55,6 +82,8 @@ if (app.Environment.IsDevelopment())
         options.AddPreferredSecuritySchemes("Bearer");
     });
 }
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health");
 app.Urls.Add("http://0.0.0.0:80");
